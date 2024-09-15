@@ -117,8 +117,9 @@ Have fun! -Your friends at SparkFun.
 // Change the following two lines to match your battery
 // and its initial state-of-charge:
 
-volatile double battery_mAh = 2000.0; // milliamp-hours (mAh)
-volatile double battery_percent = 100.0;  // state-of-charge (percent)
+const float battery_max_mAh = 2000.0; // milliamp-hours (mAh)
+volatile double battery_mAh = battery_max_mAh; // milliamp-hours (mAh)
+volatile float battery_percent = 100.0;  // state-of-charge (percent)
 
 // Global variables ("volatile" means the interrupt can
 // change them behind the scenes):
@@ -126,8 +127,11 @@ volatile double battery_percent = 100.0;  // state-of-charge (percent)
 volatile boolean isrflag;
 volatile long int time, lasttime;
 volatile double mA;
-double ah_quanta = 0.17067759; // mAh for each INT
-double percent_quanta; // calculate below
+
+const float gvf = 32.55; // Voltage to Frequency Gain 
+const float r_sense = 0.05; // Shunt resistor (0.05 ohm)
+const float c_quanta = 1/(gvf*r_sense); // Coulombs for each INT
+const float ah_quanta = c_quanta/3.6; // mAh for each INT 
 
 void setup()
 {
@@ -155,9 +159,12 @@ void setup()
   Serial.begin(9600);
   Serial.println("LTC4150 Coulomb Counter BOB interrupt example");
 
-  // One INT is this many percent of battery capacity:
-  
-  percent_quanta = 1.0/(battery_mAh/1000.0*5859.0/100.0);
+  Serial.print("Max current ");
+  Serial.print(1000.0 * 0.050 / r_sense);
+  Serial.println(" mA");
+  Serial.print("Per tick ");
+  Serial.print(ah_quanta);
+  Serial.println(" mAh");
 
   // Enable active-low interrupts on D3 (INT1) to function myISR().
   // On 328 Arduinos, you may also use D2 (INT0), change '1' to '0'. 
@@ -220,17 +227,15 @@ void myISR() // Run automatically for falling edge on D3 (INT1)
   if (polarity) // high = charging
   {
     battery_mAh += ah_quanta;
-    battery_percent += percent_quanta;
   }
   else // low = discharging
   {
     battery_mAh -= ah_quanta;
-    battery_percent -= percent_quanta;
   }
+  battery_percent = battery_mAh * 100 / battery_max_mAh;
 
   // Calculate mA from time delay (optional)
-
-  mA = 614.4/((time-lasttime)/1000000.0);
+  mA = c_quanta * 1000.0 / ((time-lasttime)/1000000.0);
 
   // If charging, we'll set mA negative (optional)
   
